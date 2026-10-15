@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Docs Snippet Tester Agent</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 2rem; background: #0f172a; color: #f8fafc; }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { color: #38bdf8; }
+    textarea { width: 100%; height: 160px; background: #1e293b; color: #f1f5f9; border: 1px solid #334155; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 14px; box-sizing: border-box; }
+    button { background: #0284c7; color: white; border: none; padding: 12px 24px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+    button:hover { background: #0369a1; }
+    .result-box { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-top: 20px; font-family: monospace; white-space: pre-wrap; }
+    .status-success { color: #4ade80; }
+    .status-fail { color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🤖 Docs Snippet Tester</h1>
+    <p>Paste an API code snippet below to test it inside a CreateOS Sandbox.</p>
+    
+    <label><strong>Code Snippet:</strong></label>
+    <textarea id="snippet" placeholder="// Paste JavaScript / Stripe snippet here..."></textarea>
+    
+    <button id="runBtn" onclick="testSnippet()">Run Agent Test</button>
+
+    <div id="outputContainer" style="display:none;">
+      <h3>Agent Execution Result:</h3>
+      <p id="status"></p>
+      <div id="logs" class="result-box"></div>
+    </div>
+  </div>
+
+  <script>
+    async function testSnippet() {
+      const snippet = document.getElementById('snippet').value;
+      const runBtn = document.getElementById('runBtn');
+      const outputContainer = document.getElementById('outputContainer');
+      const status = document.getElementById('status');
+      const logs = document.getElementById('logs');
+
+      if (!snippet) return alert('Please enter a code snippet!');
+
+      runBtn.disabled = true;
+      runBtn.innerText = 'Testing & Healing...';
+      outputContainer.style.display = 'block';
+      status.innerText = '⏳ Running inside CreateOS Sandbox...';
+      logs.innerText = '';
+
+      try {
+        const response = await fetch('/api/test-snippet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ snippet, apiDocContext: 'Stripe Node.js Integration' })
+        });
+
+        const data = await response.json();
+        runBtn.disabled = false;
+        runBtn.innerText = 'Run Agent Test';
+
+        if (data.success) {
+          status.innerHTML = `<span class="status-success">✅ Passed after ${data.attempts} attempt(s)</span>`;
+        } else {
+          status.innerHTML = `<span class="status-fail">❌ Failed after ${data.attempts} attempt(s)</span>`;
+        }
+
+        logs.innerText = "FINAL SNIPPET:\n\n" + data.finalSnippet + "\n\n--- EXECUTION LOGS ---\n" + data.logs;
+      } catch (err) {
+        runBtn.disabled = false;
+        runBtn.innerText = 'Run Agent Test';
+        status.innerHTML = `<span class="status-fail">❌ Error connecting to backend server</span>`;
+      }
+    }
+  </script>
+</body>
+</html>
