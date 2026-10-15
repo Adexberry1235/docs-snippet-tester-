@@ -1,0 +1,83 @@
+import express from 'express';
+import dotenv from 'dotenv';
+import OpenAI from 'openai';
+import axios from 'axios';
+
+dotenv.config();
+
+const app = express();
+app.use(express.json());
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const CREATEOS_API_KEY = process.env.CREATEOS_API_KEY;
+const CREATEOS_BASE_URL = 'https://api.createos.sh';
+
+async function runInCreateOSSandbox(codeSnippet) {
+  try {
+    const sandboxRes = await axios.post(
+      `${CREATEOS_BASE_URL}/sandboxes`,
+      { runtime: 'node', code: codeSnippet },
+      { headers: { Authorization: `Bearer ${CREATEOS_API_KEY}` } }
+    );
+    
+    return {
+      success: sandboxRes.data.success,
+      output: sandboxRes.data.output || sandboxRes.data.error
+    };
+  } catch (error) {
+    return {
+      success: false,
+      output: error.response?.data?.error || error.message
+    };
+  }
+}
+
+app.post('/api/test-snippet', async (req, res) => {
+  let { snippet, apiDocContext } = req.body;
+  let attempts = 0;
+  const maxAttempts = 3;
+  let executionResult = { success: false, output: '' };
+
+  while (attempts < maxAttempts && !executionResult.success) {
+    attempts++;
+    executionResult = await runInCreateOSSandbox(snippet);
+
+    if (executionResult.success) break;
+
+    const aiPrompt = `
+      You are an expert API documentation assistant.
+      The following code snippet failed when tested:
+      
+      CODE:
+      ${snippet}
+
+      ERROR OUTPUT:
+      ${executionResult.output}
+
+      API DOC CONTEXT:
+      ${apiDocContext}
+
+      Fix the code snippet so it runs successfully. Return ONLY the corrected code block.
+    `;
+
+    const aiResponse = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: aiPrompt }],
+    });
+
+    const rawContent = aiResponse.choices[0].message.content;
+    snippet = rawContent.replace(/```javascript|```/g, '').trim();
+  }
+
+  res.json({
+    success: executionResult.success,
+    finalSnippet: snippet,
+    attempts,
+    logs: executionResult.output
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Docs Snippet Tester backend running on port ${PORT}`);
+});
